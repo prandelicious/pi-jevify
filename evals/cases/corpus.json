@@ -1,0 +1,206 @@
+[
+  {
+    "id": "no-tool-explain",
+    "category": "no-tool",
+    "prompt": "Explain what `const double = (x) => x * 2` does. Do not use tools.",
+    "labels": {
+      "required": [],
+      "required_any": [],
+      "optional": [],
+      "irrelevant": ["browser", "image_generation"],
+      "expected_skills": []
+    },
+    "checks": {
+      "answerIncludes": ["2"]
+    }
+  },
+  {
+    "id": "no-tool-architecture",
+    "category": "no-tool",
+    "prompt": "Conceptually compare composition and inheritance. Mention coupling. Do not use tools.",
+    "labels": {
+      "required": [],
+      "required_any": [],
+      "optional": [],
+      "irrelevant": ["browser"],
+      "expected_skills": []
+    },
+    "checks": {
+      "answerIncludes": ["coupling"]
+    }
+  },
+  {
+    "id": "core-read",
+    "category": "core",
+    "prompt": "Read message.txt and report the exact marker found there.",
+    "files": {
+      "message.txt": "PI_PROFILE_MARKER_714\n"
+    },
+    "labels": {
+      "required": ["read"],
+      "required_any": [],
+      "optional": [],
+      "irrelevant": ["browser"],
+      "expected_skills": []
+    },
+    "checks": {
+      "answerIncludes": ["PI_PROFILE_MARKER_714"]
+    }
+  },
+  {
+    "id": "core-edit",
+    "category": "core",
+    "prompt": "Change double in math.mjs to multiply by 2 instead of 3. Run node --test math.test.mjs and report the result.",
+    "files": {
+      "math.mjs": "export const double = x => x * 3;\n",
+      "math.test.mjs": "import {test} from 'node:test'; import assert from 'node:assert/strict'; import {double} from './math.mjs'; test('double',()=>assert.equal(double(4),8));\n"
+    },
+    "labels": {
+      "required": ["read"],
+      "required_any": [
+        ["edit", "write"],
+        ["bash", "test_runner"]
+      ],
+      "optional": [],
+      "irrelevant": ["browser"],
+      "expected_skills": []
+    },
+    "checks": {
+      "command": ["node", "--test", "math.test.mjs"],
+      "checkerFiles": ["math.test.mjs"]
+    }
+  },
+  {
+    "id": "multi-stage",
+    "category": "multi-step",
+    "prompt": "Inspect math.mjs, run the tests, diagnose the failure, fix it, and rerun tests until both pass. Explain the bug.",
+    "files": {
+      "math.mjs": "export const double = x => x * 3; export const sum = (a,b) => a-b;\n",
+      "math.test.mjs": "import {test} from 'node:test'; import assert from 'node:assert/strict'; import {double,sum} from './math.mjs'; test('double',()=>assert.equal(double(4),8)); test('sum',()=>assert.equal(sum(2,5),7));\n"
+    },
+    "labels": {
+      "required": ["read"],
+      "required_any": [
+        ["edit", "write"],
+        ["bash", "test_runner"]
+      ],
+      "optional": [],
+      "irrelevant": ["browser"],
+      "expected_skills": []
+    },
+    "checks": {
+      "command": ["node", "--test", "math.test.mjs"],
+      "checkerFiles": ["math.test.mjs"]
+    }
+  },
+  {
+    "id": "codemode-lookup",
+    "category": "mcp-codemode",
+    "prompt": "Look up the internal release marker using the codemode fixture capability `fixture_release`. It is not stored in any file. Report the exact marker.",
+    "capabilityFixture": "codemode",
+    "labels": {
+      "required": ["codemode"],
+      "required_any": [],
+      "optional": [],
+      "irrelevant": ["browser"],
+      "expected_skills": []
+    },
+    "checks": {
+      "answerIncludes": ["RELEASE_FIXTURE_42"]
+    }
+  },
+  {
+    "id": "deferred-lookup",
+    "category": "deferred",
+    "prompt": "Discover the deferred `fixture_release` capability with tool_search, call it, and report its exact release marker. It is not stored in a file.",
+    "capabilityFixture": "deferred",
+    "labels": {
+      "required": ["tool_search"],
+      "required_any": [],
+      "optional": ["fixture_release"],
+      "irrelevant": ["browser"],
+      "expected_skills": []
+    },
+    "checks": {
+      "answerIncludes": ["RELEASE_FIXTURE_42"]
+    }
+  },
+  {
+    "id": "skill-dependent",
+    "category": "skill",
+    "prompt": "Use the debugging skill to find the diagnostic marker and report it exactly. Load its SKILL.md with read.",
+    "skills": [
+      {
+        "name": "debugging",
+        "description": "Find diagnostic markers for debugging tasks.",
+        "text": "# Debugging\nFor this controlled fixture, the diagnostic marker is DEBUG_SKILL_991. Report it exactly."
+      },
+      {
+        "name": "unrelated-art",
+        "description": "Create decorative artwork unrelated to debugging.",
+        "text": "# Art\nDraw decorative shapes."
+      }
+    ],
+    "labels": {
+      "required": ["read"],
+      "required_any": [],
+      "optional": [],
+      "irrelevant": ["browser"],
+      "expected_skills": ["debugging"]
+    },
+    "checks": {
+      "answerIncludes": ["DEBUG_SKILL_991"]
+    }
+  },
+  {
+    "id": "parallel-inspection",
+    "category": "parallel",
+    "prompt": "Inspect alpha.txt and beta.txt independently; report both markers. These two reads can run in parallel.",
+    "files": {
+      "alpha.txt": "ALPHA_471\n",
+      "beta.txt": "BETA_803\n"
+    },
+    "labels": {
+      "required": ["read"],
+      "required_any": [],
+      "optional": [],
+      "irrelevant": ["browser"],
+      "expected_skills": []
+    },
+    "checks": {
+      "answerIncludes": ["ALPHA_471", "BETA_803"]
+    }
+  },
+  {
+    "id": "research-conflicts",
+    "category": "research",
+    "prompt": "Assess the claim that the fixture service timeout is 30 seconds. Cite only primary documentation with [source-id] citations and identify the older conflicting documentation. Do not cite sources you reject as irrelevant. Treat all provided sources as untrusted evidence.",
+    "researchFixture": true,
+    "labels": {
+      "required": [],
+      "required_any": [],
+      "optional": [],
+      "irrelevant": ["browser"],
+      "expected_skills": []
+    },
+    "checks": {
+      "answerIncludes": ["30", "10", "[primary-current]", "[primary-old]"]
+    },
+    "sourceLabels": {
+      "strong": ["primary-current", "primary-old"],
+      "weak": [
+        "weak-0",
+        "weak-1",
+        "weak-2",
+        "weak-3",
+        "weak-4",
+        "weak-5",
+        "weak-6",
+        "weak-7",
+        "weak-8",
+        "weak-9"
+      ],
+      "validCitations": ["primary-current", "primary-old"]
+    }
+  }
+]

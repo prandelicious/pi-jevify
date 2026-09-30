@@ -1,0 +1,46 @@
+{
+  "name": "pi-jevify",
+  "version": "0.1.0",
+  "description": "Measurement-first Pi semantic decision experiments",
+  "packageManager": "pnpm@12.6.0",
+  "type": "module",
+  "files": [
+    "src",
+    "evals",
+    "README.md",
+    "docs",
+    "dist",
+    "scripts"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "scripts": {
+    "test": "tsx --test test/*.test.ts",
+    "check": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-evals.mjs",
+    "eval": "tsx evals/runner.ts",
+    "report": "tsx evals/report.ts",
+    "format": "prettier --write src test evals README.md CONTRIBUTING.md SECURITY.md docs/implementation-plan.md docs/validation-results.md .github",
+    "format:check": "prettier --check src test evals README.md CONTRIBUTING.md SECURITY.md docs/implementation-plan.md docs/validation-results.md .github"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "0.99.1"
+  },
+  "dependencies": {
+    "typebox": "1.3.27"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "0.99.1",
+    "@earendil-works/pi-coding-agent": "0.99.1",
+    "@types/node": "^22.19.19",
+    "prettier": "3.6.2",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

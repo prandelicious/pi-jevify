@@ -1,0 +1,5 @@
+# Explicitly deny dependency lifecycle scripts; the platform binaries already work.
+allowBuilds:
+  "@google/genai": false
+  esbuild: false
+  protobufjs: false
