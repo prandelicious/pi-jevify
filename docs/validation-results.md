@@ -1,10 +1,14 @@
 # Validation results
 
-Validated on 2026-09-30 against Pi 0.99.1. The package remains in baseline mode by default.
+Historical live results below were validated on 2026-09-30 against Pi 0.99.1. The package remains in baseline mode by default.
+
+## Current offline Codemode validation
+
+The native Codemode evidence slice was validated on 2026-10-01 against Pi 0.99.2 and Node 22.19.0+. Three fixed research cases passed in both `codemode-baseline` and `codemode-jev` modes. The Jev fixture retained both current and archived primary sources; the failure case returned an invalid classifier result and failed open to the deterministic shortlist. Reports included nested `models.classify` usage once in `total_cost`. These are fixture harness checks, not live quality or savings claims.
 
 ## Implementation checks
 
-- 41 automated tests passed, including Pi’s own TypeScript extension loader and actual SDK tool execution.
+- 53 automated tests passed, including Pi’s own TypeScript extension loader and actual SDK tool execution.
 - Type checking and compiled build passed. Package contents and the compiled runner were checked locally.
 - All four tool/catalog shadow and enforcement modes passed real SDK contract tests with scripted providers.
 - Timeout, invalid/missing probabilities, exact restoration, rerouting, user-run settlement, preserved skill/tool names, immutable checkers and aggregate recovery-rate gates are covered.

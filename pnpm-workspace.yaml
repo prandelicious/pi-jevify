@@ -3,3 +3,17 @@ allowBuilds:
   "@google/genai": false
   esbuild: false
   protobufjs: false
+
+# Keep pnpm's 24-hour release-age protection for ordinary dependencies. These
+# exact reviewed Pi 0.99.2 packages are excluded because the pinned SDK release
+# was published within the CI window when this branch was prepared.
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - "@earendil-works/chord@0.99.2"
+  - "@earendil-works/pi-agent-core@0.99.2"
+  - "@earendil-works/pi-ai@0.99.2"
+  - "@earendil-works/pi-codemode@0.99.2"
+  - "@earendil-works/pi-coding-agent@0.99.2"
+  - "@earendil-works/pi-mcp@0.99.2"
+  - "@earendil-works/pi-telemetry@0.99.2"
+  - "@earendil-works/pi-tui@0.99.2"

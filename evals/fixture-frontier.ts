@@ -2,12 +2,17 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { EvalCase } from "./corpus.js";
 import type { Model } from "@earendil-works/pi-ai";
+import { codemodeEvidenceScript } from "../src/codemode-evidence.js";
 interface Step {
   name: string;
   arguments: Record<string, unknown>;
 }
 /** Local scripted OpenAI-compatible server exercises real Pi SDK hooks and tool execution. */
-export async function fixtureFrontier(c: EvalCase, skillPath?: string) {
+export async function fixtureFrontier(
+  c: EvalCase,
+  skillPath?: string,
+  mode: "baseline" | "jev" | null = null,
+) {
   const steps: Step[][] = [];
   if (c.id === "core-read")
     steps.push([{ name: "read", arguments: { path: "message.txt" } }]);
@@ -40,6 +45,15 @@ export async function fixtureFrontier(c: EvalCase, skillPath?: string) {
         name: "codemode",
         arguments: {
           code: "const result = await tools.fixture_release({}); console.log(result);",
+        },
+      },
+    ]);
+  if (c.researchFixture && mode)
+    steps.push([
+      {
+        name: "codemode",
+        arguments: {
+          code: codemodeEvidenceScript(mode, { task: c.prompt }),
         },
       },
     ]);

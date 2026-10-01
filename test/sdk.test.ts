@@ -1,8 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runCase } from "../evals/runner.js";
-import { loadCorpus } from "../evals/corpus.js";
+import { createHash } from "node:crypto";
+import { main, runCase } from "../evals/runner.js";
+import { loadCorpus, researchSources } from "../evals/corpus.js";
 const corpus = loadCorpus();
+test("native Codemode CLI rejects non-fixture runs before model setup", async () => {
+  await assert.rejects(
+    main(["--mode", "codemode-jev", "--repeat", "1"]),
+    /require --fixture/,
+  );
+});
 test("real Pi SDK keeps hidden external fixture registered without declaring its schema", async () => {
   const traces = await runCase(
     corpus.find((c) => c.id === "codemode-lookup")!,
@@ -33,6 +40,58 @@ test("real Pi BM25 discovers and loads a deferred fixture", async () => {
     ).includes("fixture_release"),
   );
 });
+for (const mode of ["codemode-baseline", "codemode-jev"] as const) {
+  test(`real Pi SDK ${mode} filters evidence in native Codemode`, async () => {
+    const c = corpus.find((c) => c.id === "research-conflicts")!;
+    const traces = await runCase(c, { mode, fixture: true, repeat: 0 });
+    const run = traces.find((t) => t.type === "run")!;
+    assert.equal(run.task_success, true);
+    assert.equal(run.experiment_applied, mode === "codemode-jev");
+    const summary = run.codemode_evidence as {
+      retained_sources: string[];
+      fail_open: boolean;
+    };
+    assert.ok(summary.retained_sources.includes("primary-current"));
+    assert.ok(summary.retained_sources.includes("primary-old"));
+    assert.equal(summary.fail_open, false);
+    assert.ok(
+      (run.codemode_calls as string[]).includes("fixture_research_sources"),
+    );
+    if (mode === "codemode-jev") {
+      assert.ok((run.codemode_calls as string[]).includes("models.classify"));
+      assert.equal(run.workflow_classifier_input, 100);
+      assert.equal(run.total_cost, run.workflow_classifier_cost);
+      assert.equal(run.codemode_classifier_task_matches_prompt, true);
+      assert.equal(run.codemode_classifier_claim_present, true);
+      assert.equal(
+        run.codemode_classifier_source_count,
+        researchSources(c.id).filter(
+          (source) => source.text.trim().length >= 32,
+        ).length,
+      );
+      assert.equal(
+        run.codemode_classifier_source_text_hash,
+        createHash("sha256")
+          .update(
+            researchSources(c.id)
+              .filter((source) => source.text.trim().length >= 32)
+              .map((source) => source.text)
+              .join("\u0000"),
+          )
+          .digest("hex"),
+      );
+      const serialized = JSON.stringify(traces);
+      assert.doesNotMatch(serialized, /IGNORE ALL PRIOR INSTRUCTIONS/);
+      assert.doesNotMatch(serialized, /fixture service timeout is 30 seconds/);
+      const nestedCalls = run.codemode_nested_calls as Record<
+        string,
+        unknown
+      >[];
+      assert.ok(nestedCalls.length > 0);
+      assert.ok(nestedCalls.every((call) => !Object.hasOwn(call, "args")));
+    }
+  });
+}
 for (const mode of [
   "shadow-tools",
   "enforced-tools",

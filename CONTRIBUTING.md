@@ -4,7 +4,7 @@ Thanks for helping improve pi-jevify. Keep changes focused and explain the behav
 
 ## Set up
 
-Use Node.js 22 or newer and pnpm 12.6.0. Install dependencies and run the checks before opening a pull request:
+Use Node.js 22.19.0 or newer and pnpm 12.6.0. Install dependencies and run the checks before opening a pull request:
 
 ```sh
 pnpm install --frozen-lockfile

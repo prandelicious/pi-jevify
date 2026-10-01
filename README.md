@@ -2,7 +2,7 @@
 
 A measurement-first Pi extension and evaluation harness. Baseline profiling is the default. The main model keeps planning, tool arguments, parallel execution and synthesis; the decision provider supplies independent Noul relevance probabilities.
 
-Targets **Pi 0.99.1** (`@earendil-works/pi-coding-agent`) and Node 22+. It uses `ctx.modelRegistry.classify()`; no separate Jev HTTP client or BM25 replacement is included.
+Targets **Pi 0.99.2** (`@earendil-works/pi-coding-agent`) and Node **22.19.0+**. It uses Pi's native `ctx.modelRegistry.classify()` and Codemode VM; no separate Jev HTTP client or BM25 replacement is included.
 
 ## Run it
 
@@ -44,6 +44,7 @@ Supported modes:
 - `shadow-tools`, `enforced-tools`
 - `shadow-skills`, `enforced-skills`
 - `research-baseline`, `research-decision-filter`
+- `codemode-baseline`, `codemode-jev`
 
 An experimental runner invocation requires a matching `allowed: true` gate generated from baseline traces. Gates distinguish live evidence from scripted fixtures. Defaults require three baseline runs and either 4 KiB mean tool declarations, one labeled irrelevant call per run, 4 KiB skill metadata, or 8 KiB extracted evidence. These are configurable experimental hypotheses in `hypothesisGate()`, not calibrated quality guarantees. A stopped gate is an expected project outcome.
 
@@ -78,9 +79,25 @@ pnpm eval --mode research-decision-filter --provider jev --repeat 3 \
 
 The included research task deliberately uses fictional extracted documentation, weak pages, an outdated authoritative contradiction, and injected instructions. It measures context retention and citation IDs. Search and parallel extraction remain the caller's responsibility. This is an extracted-evidence experiment, not a web retrieval benchmark.
 
+Native Codemode evidence comparison keeps retrieval and filtering inside the Pi VM. The CLI modes are intentionally fixture-only; a live integration needs Pi credentials for both the frontier model and the Jev classifier, plus a Codemode-callable source tool supplied by the host. Use the exported recipe for that host integration. The Codemode baseline applies deterministic thin-source filtering and stores retained evidence; source text remains untrusted evidence and embedded instructions are never followed. The Jev mode calls `models.classify()` inside the VM, keeps relevant primary evidence including archived contradictions, and fails open to the deterministic shortlist when the classifier is unavailable or invalid.
+
+```sh
+pnpm eval --mode codemode-baseline --fixture --repeat 1 \
+  --output .traces/codemode-baseline.jsonl
+pnpm eval --mode codemode-jev --fixture --repeat 1 \
+  --output .traces/codemode-jev.jsonl
+cat .traces/codemode-baseline.jsonl .traces/codemode-jev.jsonl > .traces/codemode-comparison.jsonl
+pnpm report --input .traces/codemode-comparison.jsonl \
+  --output .traces/codemode-comparison.md
+```
+
+The offline fixture uses Pi's actual SDK, a registered classifier model, native `models.classify()`, and QuickJS Codemode execution. Its labels and answers are fixed harness evidence, not live-quality claims. `codemode_calls`, nested call details, `workflow_classifier_*`, retained evidence sizes, and `total_cost` are recorded separately; nested classifier usage is included once in total cost.
+
+For a host supplied source tool, the reusable VM recipe is in [`examples/codemode-evidence-recipe.ts`](examples/codemode-evidence-recipe.ts). It expects a Codemode-callable `research_sources` tool and a classifier registered in Pi's model registry, then stores the retained source IDs with `store("retained_evidence", ...)` and returns exact UTF-8 `evidence_bytes` and `retained_evidence_bytes`. Replace `<full research task>` with the complete user task and `<claim>` with the separate claim before running it. The illustrative `0.5` cutoff is a fixture policy, not a calibrated probability guarantee. If the classifier is missing or returns an invalid answer, keep the deterministic candidates and mark the result `fail_open`.
+
 ## Traces and reports
 
-JSONL is the source of truth. Requests record actual serialized provider declarations, separate registered/active/declared/codemode/deferred tools, and skill catalogs found in the actual request. Bytes are exact UTF-8 fragment sizes; token estimates are explicitly `ceil(bytes / 4)`, not provider tokenization. OpenAI, Anthropic, Google and Bedrock declaration envelopes are covered. Opaque/unrecognized declarations remain unavailable rather than using catalog size as a proxy.
+JSONL is the source of truth. Requests record actual serialized provider declarations, separate registered/active/declared/codemode/deferred tools, and skill catalogs found in the actual request. Bytes are exact UTF-8 fragment sizes; token estimates are explicitly `ceil(bytes / 4)`, not provider tokenization. OpenAI, Anthropic, Google and Bedrock declaration envelopes are covered. Opaque/unrecognized declarations remain unavailable rather than using catalog size as a proxy. Traces omit raw prompts, source bodies, and arbitrary tool arguments; Codemode nested calls retain only safe names, linkage, durations, model identifiers, and costs.
 
 Turn records link to requests and retain Pi's input, output, `cacheRead`, `cacheWrite`, latency and cost. Run records aggregate calls, nested calls, turns, decision usage, failure/recovery and quality. Input means Pi's uncached input; cache reads and writes stay separate. Retry requests are recorded even when only one final assistant result exists. Normal-session quality is unavailable rather than inferred from a successful API response.
 
@@ -100,6 +117,8 @@ Pairs must match case, repetition, source, workload hash and model. The promisin
 ```sh
 pnpm eval --mode baseline --fixture --repeat 2 --output .traces/fixture-baseline.jsonl
 pnpm eval --mode research-baseline --fixture --repeat 3 --output .traces/fixture-research.jsonl
+pnpm eval --mode codemode-baseline --fixture --case research-conflicts --repeat 1 --output .traces/fixture-codemode-baseline.jsonl
+pnpm eval --mode codemode-jev --fixture --case research-conflicts --repeat 1 --output .traces/fixture-codemode-jev.jsonl
 ```
 
 Fixture mode runs a local scripted OpenAI-compatible server and deterministic decision adapter through Pi's real SDK. It validates wiring and reproducibility with no paid requests. Its answers are scripted and cannot establish model quality, latency savings, cost savings, or live MCP compatibility. All four routing/catalog modes and recovery have dedicated SDK tests.

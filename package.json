@@ -7,6 +7,7 @@
   "files": [
     "src",
     "evals",
+    "examples",
     "README.md",
     "docs",
     "dist",
@@ -27,17 +28,17 @@
     "format:check": "prettier --check src test evals README.md CONTRIBUTING.md SECURITY.md docs/implementation-plan.md docs/validation-results.md .github"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.19.0"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "0.99.1"
+    "@earendil-works/pi-coding-agent": "0.99.2"
   },
   "dependencies": {
     "typebox": "1.3.27"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "0.99.1",
-    "@earendil-works/pi-coding-agent": "0.99.1",
+    "@earendil-works/pi-ai": "0.99.2",
+    "@earendil-works/pi-coding-agent": "0.99.2",
     "@types/node": "^22.19.19",
     "prettier": "3.6.2",
     "tsx": "^4.20.0",
