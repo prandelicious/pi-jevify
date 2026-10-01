@@ -8,6 +8,8 @@ export const MODES = [
   "enforced-skills",
   "research-baseline",
   "research-decision-filter",
+  "codemode-baseline",
+  "codemode-jev",
 ] as const;
 export type Mode = (typeof MODES)[number];
 export interface NoulQuestion {

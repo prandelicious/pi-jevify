@@ -11,6 +11,11 @@ import { filterSkills } from "./skill-filtering.js";
 import { jsonlSink } from "./telemetry.js";
 import { JEV_PRICING } from "./pricing.js";
 import {
+  addCodemodeClassifierUsage,
+  codemodeUsage,
+  parseCodemodeEvidence,
+} from "./codemode-evidence.js";
+import {
   MODES,
   type RouterOptions,
   type Trace,
@@ -58,6 +63,14 @@ export function createRouterExtension(options: RouterOptions = {}) {
     let routing: RoutingResult | null = null;
     let requests: Trace[] = [];
     let turns: Trace[] = [];
+    let codemodeInput: number | null = 0;
+    let codemodeOutput: number | null = 0;
+    let codemodeCacheRead: number | null = 0;
+    let codemodeCacheWrite: number | null = 0;
+    let codemodeCost: number | null = 0;
+    let codemodeCalls: string[] = [];
+    let codemodeCallDetails: Record<string, unknown>[] = [];
+    let codemodeEvidence: Record<string, unknown> | null = null;
     let warned = false;
     let sink: ((trace: Trace) => void) | undefined;
     const source = options.source ?? "live";
@@ -154,6 +167,14 @@ export function createRouterExtension(options: RouterOptions = {}) {
       recoveryTurn = 0;
       requests = [];
       turns = [];
+      codemodeInput = 0;
+      codemodeOutput = 0;
+      codemodeCacheRead = 0;
+      codemodeCacheWrite = 0;
+      codemodeCost = 0;
+      codemodeCalls = [];
+      codemodeCallDetails = [];
+      codemodeEvidence = null;
       routing = null;
       try {
         sink = options.tracePath
@@ -344,6 +365,90 @@ export function createRouterExtension(options: RouterOptions = {}) {
         if (skill) skillsRead.push(skill.name);
       }
     });
+    pi.on("tool_execution_end", (event) => {
+      if (!baseline || event.toolName !== "codemode" || event.parentToolCallId)
+        return;
+      const usage = codemodeUsage(event.result);
+      codemodeCalls.push(...usage.calls);
+      const executionCallDetails: Record<string, unknown>[] = [];
+      if (
+        event.result &&
+        typeof event.result === "object" &&
+        "details" in event.result &&
+        event.result.details &&
+        typeof event.result.details === "object" &&
+        "calls" in event.result.details &&
+        Array.isArray(event.result.details.calls)
+      ) {
+        const callsForExecution = event.result.details.calls.filter(
+          (call: unknown): call is Record<string, unknown> =>
+            typeof call === "object" && call !== null,
+        );
+        executionCallDetails.push(...callsForExecution);
+        codemodeCallDetails.push(
+          ...callsForExecution.map((call: Record<string, unknown>) => {
+            const safe: Record<string, unknown> = {};
+            for (const key of [
+              "name",
+              "parentToolCallId",
+              "durationMs",
+              "model",
+              "cost",
+            ]) {
+              const value = call[key];
+              if (
+                key === "durationMs" || key === "cost"
+                  ? typeof value === "number"
+                  : typeof value === "string"
+              )
+                safe[key] = value;
+            }
+            return safe;
+          }),
+        );
+      }
+      // Usage belongs to this Codemode execution. A source-only execution
+      // must not reuse an earlier classify call's model arguments or cost.
+      const classifierUsage = addCodemodeClassifierUsage(
+        {
+          input: codemodeInput,
+          output: codemodeOutput,
+          cacheRead: codemodeCacheRead,
+          cacheWrite: codemodeCacheWrite,
+          cost: codemodeCost,
+        },
+        usage,
+        executionCallDetails
+          .filter(
+            (call) =>
+              call.name === "models.classify" && typeof call.args === "string",
+          )
+          .map((call) => String(call.args)),
+      );
+      codemodeInput = classifierUsage.input;
+      codemodeOutput = classifierUsage.output;
+      codemodeCacheRead = classifierUsage.cacheRead;
+      codemodeCacheWrite = classifierUsage.cacheWrite;
+      codemodeCost = classifierUsage.cost;
+      const text = Array.isArray(event.result?.content)
+        ? event.result.content
+            .filter((part: unknown) => {
+              return (
+                typeof part === "object" &&
+                part !== null &&
+                "type" in part &&
+                part.type === "text" &&
+                "text" in part &&
+                typeof part.text === "string"
+              );
+            })
+            .map((part: { text: string }) => part.text)
+            .join("\n")
+        : "";
+      const parsed = parseCodemodeEvidence(text);
+      if (parsed)
+        codemodeEvidence = parsed as unknown as Record<string, unknown>;
+    });
     pi.on("agent_settled", () => {
       if (!baseline) return;
       const sum = (key: string): number | null =>
@@ -358,6 +463,7 @@ export function createRouterExtension(options: RouterOptions = {}) {
       const d = routing?.decision;
       const frontierCost = sum("frontier_cost");
       const decisionCost = d?.cost ?? (routing ? null : 0);
+      const workflowCost = codemodeCost;
       try {
         emit("run", {
           task_success: null,
@@ -395,9 +501,19 @@ export function createRouterExtension(options: RouterOptions = {}) {
               ? JEV_PRICING
               : null,
           decision_latency_ms: d?.latencyMs ?? (routing ? null : 0),
+          codemode_input: codemodeInput,
+          codemode_output: codemodeOutput,
+          codemode_cache_read: codemodeCacheRead,
+          codemode_cache_write: codemodeCacheWrite,
+          codemode_cost: workflowCost,
+          codemode_calls: [...new Set(codemodeCalls)],
+          codemode_nested_calls: codemodeCallDetails,
+          codemode_evidence: codemodeEvidence,
           total_cost:
-            frontierCost !== null && decisionCost !== null
-              ? frontierCost + decisionCost
+            frontierCost !== null &&
+            decisionCost !== null &&
+            workflowCost !== null
+              ? frontierCost + decisionCost + workflowCost
               : null,
           tool_calls: calls.length,
           tool_call_names: [...calls],

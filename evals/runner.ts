@@ -24,6 +24,12 @@ import {
   type Skill,
   type ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
+import type {
+  ClassifierModel,
+  ClassifierResult,
+  ClassifierContext,
+  JsonValue,
+} from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { createRouterExtension } from "../src/index.js";
 import { PiClassifierProvider } from "../src/decisions.js";
@@ -59,6 +65,10 @@ export async function runCase(
   mkdirSync(cwd);
   mkdirSync(agentDir);
   let frontier: Awaited<ReturnType<typeof fixtureFrontier>> | undefined;
+  let classifierTaskMatchesPrompt = false;
+  let classifierClaimPresent = false;
+  let classifierSourceCount = 0;
+  let classifierSourceTextHash: string | null = null;
   let session:
     | Awaited<ReturnType<typeof createAgentSession>>["session"]
     | undefined;
@@ -99,13 +109,148 @@ export async function runCase(
     });
     let model;
     if (options.fixture) {
-      frontier = await fixtureFrontier(c, skills[0]?.filePath);
+      frontier = await fixtureFrontier(
+        c,
+        skills[0]?.filePath,
+        options.mode === "codemode-jev"
+          ? "jev"
+          : options.mode === "codemode-baseline"
+            ? "baseline"
+            : null,
+      );
       model = frontier.model;
+      const classifierModel: ClassifierModel<"typesafe-system-one"> = {
+        type: "classifier",
+        id: "fixture-classifier",
+        name: "Fixture classifier",
+        provider: "fixture",
+        api: "typesafe-system-one",
+        baseUrl: model.baseUrl,
+        input: ["text"],
+        cost: { input: 0.042, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 32000,
+      };
       runtime.registerProvider("fixture", {
         api: "openai-completions",
         baseUrl: model.baseUrl,
         apiKey: "local-test-key",
-        models: [model],
+        models: [model, classifierModel],
+        classifiers: {
+          "typesafe-system-one": {
+            classify: async (
+              _classifier: ClassifierModel<"typesafe-system-one">,
+              context: ClassifierContext,
+            ): Promise<ClassifierResult> => {
+              classifierTaskMatchesPrompt = context.state.task === c.prompt;
+              classifierClaimPresent = typeof context.state.claim === "string";
+              const classifierSourceTexts =
+                context.state.sources &&
+                typeof context.state.sources === "object"
+                  ? Object.values(
+                      context.state.sources as Record<string, unknown>,
+                    ).map((source) =>
+                      source && typeof source === "object" && "text" in source
+                        ? String(source.text)
+                        : "",
+                    )
+                  : [];
+              classifierSourceCount = classifierSourceTexts.length;
+              classifierSourceTextHash = createHash("sha256")
+                .update(classifierSourceTexts.join("\u0000"))
+                .digest("hex");
+              const answers: ClassifierResult["answers"] = {};
+              const sources = context.state.sources;
+              const sourceByIndex = (id: string) => {
+                const match = /^s(\d+)_/.exec(id);
+                return match && sources && typeof sources === "object"
+                  ? (sources as Record<string, unknown>)[`s${match[1]}`]
+                  : undefined;
+              };
+              if (c.id === "research-injection-failure")
+                return {
+                  api: "typesafe-system-one",
+                  provider: "fixture",
+                  model: "fixture-classifier",
+                  answers,
+                  stopReason: "error",
+                  errorMessage: "fixture classifier failed",
+                  usage: {
+                    input: 13,
+                    output: 3,
+                    cacheRead: 0,
+                    cacheWrite: 0,
+                    totalTokens: 16,
+                    cost: {
+                      input: 0.000000546,
+                      output: 0,
+                      cacheRead: 0,
+                      cacheWrite: 0,
+                      total: 0.000000546,
+                    },
+                  },
+                  timestamp: Date.now(),
+                };
+              for (const id of Object.keys(context.questions)) {
+                const source = sourceByIndex(id);
+                const text =
+                  source && typeof source === "object" && "text" in source
+                    ? String(source.text)
+                    : "";
+                const injection = /ignore all prior instructions/i.test(text);
+                // Fixture semantics model authorship/provenance: an archived
+                // original remains primary, while agreement/recency is separate.
+                const primary = text.includes("Official");
+                const old = text.includes("archived");
+                const dimension = id.slice(id.indexOf("_") + 1);
+                const probability =
+                  dimension === "relevant"
+                    ? primary
+                      ? 0.99
+                      : 0.05
+                    : dimension === "primary"
+                      ? primary
+                        ? 0.99
+                        : 0.05
+                      : dimension === "supports"
+                        ? old
+                          ? 0.1
+                          : primary
+                            ? 0.99
+                            : 0.05
+                        : dimension === "strong"
+                          ? primary
+                            ? 0.99
+                            : 0.05
+                          : injection
+                            ? 0.99
+                            : 0.01;
+                answers[id] = { type: "bool", probability };
+              }
+              return {
+                api: "typesafe-system-one",
+                provider: "fixture",
+                model: "fixture-classifier",
+                answers,
+                stopReason: "stop",
+                usage: {
+                  input: 100,
+                  output: 20,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  totalTokens: 120,
+                  cost: {
+                    input: 0.0000042,
+                    output: 0,
+                    cacheRead: 0,
+                    cacheWrite: 0,
+                    total: 0.0000042,
+                  },
+                },
+                timestamp: Date.now(),
+              };
+            },
+          },
+        },
       });
     } else {
       const settings = existsSync(join(userDir, "settings.json"))
@@ -172,12 +317,54 @@ export async function runCase(
         }),
       );
       factories.unshift(
-        createCodemodeExtension({ models: false }),
+        createCodemodeExtension({ models: options.mode === "codemode-jev" }),
         createToolSearchExtension(),
       );
       tools.push(
         c.capabilityFixture === "codemode" ? "codemode" : "tool_search",
       );
+    }
+    if (c.researchFixture && options.mode.startsWith("codemode-")) {
+      factories.unshift((pi) =>
+        pi.registerTool({
+          name: "fixture_research_sources",
+          label: "Fixture research sources",
+          description:
+            "Fetch the controlled research evidence fixture through a local source tool.",
+          parameters: Type.Object({}),
+          outputSchema: Type.Object({
+            sources: Type.Array(
+              Type.Object({
+                id: Type.String(),
+                url: Type.String(),
+                text: Type.String(),
+                contentType: Type.Optional(Type.String()),
+                publishedAt: Type.Optional(Type.String()),
+              }),
+            ),
+          }),
+          exposure: "codemode",
+          namespace: {
+            name: "fixture",
+            description: "Local fixture source, not a live retrieval service",
+          },
+          async execute() {
+            return {
+              content: [
+                { type: "text", text: "Fetched controlled research sources." },
+              ],
+              details: { source_count: researchSources(c.id).length },
+              structuredContent: {
+                sources: researchSources(c.id),
+              } as unknown as JsonValue,
+            };
+          },
+        }),
+      );
+      factories.unshift(
+        createCodemodeExtension({ models: options.mode === "codemode-jev" }),
+      );
+      tools.push("codemode");
     }
     const settings = SettingsManager.inMemory({
       defaultTools: tools,
@@ -200,7 +387,7 @@ export async function runCase(
     let prompt = c.prompt;
     let evidenceFields: Record<string, unknown> = {};
     if (c.researchFixture) {
-      const sources = researchSources();
+      const sources = researchSources(c.id);
       let retained = sources;
       let decision = null;
       let failOpen = false;
@@ -218,9 +405,10 @@ export async function runCase(
         failOpen = filtered.failOpen;
         decisionFailure = filtered.reason;
       }
-      prompt +=
-        "\n\nProvided extracted sources:\n" +
-        retained.map((s) => JSON.stringify(s)).join("\n");
+      if (!options.mode.startsWith("codemode-"))
+        prompt +=
+          "\n\nProvided extracted sources:\n" +
+          retained.map((s) => JSON.stringify(s)).join("\n");
       const ids = new Set(retained.map((s) => s.id));
       const labels = c.sourceLabels!;
       evidenceFields = {
@@ -318,7 +506,43 @@ export async function runCase(
       called,
     );
     const skillSelected = run.selected_skills as string[];
+    if (c.researchFixture && options.mode.startsWith("codemode-")) {
+      const summary = run.codemode_evidence as {
+        retained_sources?: string[];
+        evidence_bytes?: number;
+        retained_evidence_bytes?: number;
+        fail_open?: boolean;
+      } | null;
+      const retainedIds = summary?.retained_sources ?? [];
+      const labels = c.sourceLabels!;
+      Object.assign(evidenceFields, {
+        evidence_bytes: summary?.evidence_bytes ?? null,
+        retained_evidence_bytes: summary?.retained_evidence_bytes ?? null,
+        retained_sources: retainedIds,
+        strong_source_recall:
+          labels.strong.filter((id) => retainedIds.includes(id)).length /
+          labels.strong.length,
+        weak_source_rejection:
+          labels.weak.filter((id) => !retainedIds.includes(id)).length /
+          labels.weak.length,
+        workflow_classifier_input: run.codemode_input ?? null,
+        workflow_classifier_output: run.codemode_output ?? null,
+        decision_latency_ms: 0,
+        workflow_classifier_cost: run.codemode_cost ?? null,
+        decision_probabilities: null,
+        decision_failure: summary?.fail_open
+          ? "Codemode classifier failed; deterministic fallback"
+          : null,
+        fail_open: summary?.fail_open ?? false,
+        experiment_applied: options.mode === "codemode-jev",
+        provider: options.mode === "codemode-jev" ? "jev" : "none",
+      });
+    }
     Object.assign(run, {
+      codemode_classifier_task_matches_prompt: classifierTaskMatchesPrompt,
+      codemode_classifier_claim_present: classifierClaimPresent,
+      codemode_classifier_source_count: classifierSourceCount,
+      codemode_classifier_source_text_hash: classifierSourceTextHash,
       ...evidenceFields,
       task_success:
         !timedOut &&
@@ -368,7 +592,12 @@ export async function runCase(
         : 0;
       run.task_success =
         run.task_success === true && run.citation_correctness === 1;
-      const cost = run.decision_cost;
+      const cost =
+        options.mode === "codemode-baseline"
+          ? 0
+          : options.mode.startsWith("codemode-")
+            ? run.codemode_cost
+            : run.decision_cost;
       run.total_cost =
         typeof run.frontier_cost === "number" && typeof cost === "number"
           ? run.frontier_cost + cost
@@ -405,6 +634,10 @@ export async function main(args: string[]) {
   const mode = (value("--mode") ?? "baseline") as Mode;
   if (!MODES.includes(mode)) throw new Error("Invalid eval mode");
   const fixture = args.includes("--fixture");
+  if (mode.startsWith("codemode-") && !fixture)
+    throw new Error(
+      "Native Codemode eval modes require --fixture; use the exported recipe with a host source tool for live integration.",
+    );
   const provider = value("--provider") ?? "jev";
   if (provider !== "jev")
     throw new Error(
@@ -434,9 +667,10 @@ export async function main(args: string[]) {
     throw new Error(
       "A matching allowed baseline gate is required. Generate it from baseline JSONL with pnpm report.",
     );
+  const nativeResearch = mode.startsWith("codemode-");
   const cases = loadCorpus(value("--corpus")).filter(
     (c) =>
-      (mode.startsWith("research-")
+      (mode.startsWith("research-") || nativeResearch
         ? c.category === "research"
         : c.category !== "research") &&
       (!value("--case") || c.id === value("--case")),

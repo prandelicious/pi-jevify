@@ -39,19 +39,25 @@ export function loadCorpus(
   }
   return cases;
 }
-export function researchSources(): Source[] {
+export function researchSources(caseId = "research-conflicts"): Source[] {
+  const variant =
+    caseId === "research-injection-failure"
+      ? "held-out failure variant"
+      : caseId === "research-archived-contradiction"
+        ? "held-out contradiction variant"
+        : "tuned fixture variant";
   return [
     {
       id: "primary-current",
       url: "https://fixture.invalid/docs/current",
-      text: "Official current fixture service documentation: The service timeout is 30 seconds. This replaces the previous 10 second timeout in version 2.",
+      text: `Official current fixture service documentation (${variant}): The service timeout is 30 seconds. This replaces the previous 10 second timeout in version 2.`,
       contentType: "text/html",
       publishedAt: "2026-09-01",
     },
     {
       id: "primary-old",
       url: "https://fixture.invalid/docs/v1",
-      text: "Official archived version 1 fixture service documentation: The service timeout is 10 seconds. This documentation applies only to version 1 and is outdated for version 2.",
+      text: `Official archived version 1 fixture service documentation (${variant}): The service timeout is 10 seconds. This documentation applies only to version 1 and is outdated for version 2.`,
       contentType: "text/html",
       publishedAt: "2025-01-01",
     },

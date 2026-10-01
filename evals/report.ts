@@ -98,6 +98,11 @@ export const METRICS = [
   "decision_input",
   "decision_output",
   "decision_latency_ms",
+  "workflow_classifier_input",
+  "workflow_classifier_output",
+  "workflow_classifier_cost",
+  "evidence_bytes",
+  "retained_evidence_bytes",
   "wall_clock_ms",
   "total_cost",
   "required_capability_recall",
@@ -113,9 +118,12 @@ export function compareRuns(
   options: { maxRerouteRate?: number } = {},
 ) {
   const rows = traces.filter((r) => r.type === "run");
-  const baselineMode = mode.startsWith("research-")
-    ? "research-baseline"
-    : "baseline";
+  const baselineMode =
+    mode === "codemode-jev"
+      ? "codemode-baseline"
+      : mode.startsWith("research-")
+        ? "research-baseline"
+        : "baseline";
   const key = (r: Trace) =>
     JSON.stringify([
       r.task_id,
@@ -277,7 +285,7 @@ export function markdownReport(traces: Trace[]): string {
     );
   }
   for (const mode of modes.filter(
-    (m) => !["baseline", "research-baseline"].includes(m),
+    (m) => !["baseline", "research-baseline", "codemode-baseline"].includes(m),
   )) {
     const report = compareRuns(traces, mode);
     lines.push(
@@ -286,6 +294,32 @@ export function markdownReport(traces: Trace[]): string {
       "",
       `${report.reason} Matched pairs: ${report.pairs}; unmatched: ${report.unmatched}.`,
       "",
+    );
+    const nested = traces
+      .filter((trace) => trace.type === "run" && trace.mode === mode)
+      .flatMap((trace) =>
+        Array.isArray(trace.codemode_nested_calls)
+          ? trace.codemode_nested_calls
+          : [],
+      );
+    if (nested.length) {
+      lines.push(
+        `Codemode nested calls: ${nested
+          .map((call) => {
+            const item = call as Record<string, unknown>;
+            const duration =
+              typeof item.durationMs === "number"
+                ? ` ${item.durationMs.toFixed(1)}ms`
+                : "";
+            const cost =
+              typeof item.cost === "number" ? ` $${item.cost.toFixed(8)}` : "";
+            return `${String(item.name ?? "unknown")}${duration}${cost}`;
+          })
+          .join(", ")}`,
+        "",
+      );
+    }
+    lines.push(
       "| Metric | Baseline | Experiment | Delta |",
       "|---|---:|---:|---:|",
     );

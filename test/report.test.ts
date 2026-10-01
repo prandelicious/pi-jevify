@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hypothesisGate, compareRuns } from "../evals/report.js";
+import { hypothesisGate, compareRuns, METRICS } from "../evals/report.js";
 import type { Trace } from "../src/types.js";
 const row = (
   id: string,
@@ -109,4 +109,8 @@ test("a reroute on every run is not a low recovery rate", () => {
     }),
   ]).flat();
   assert.notEqual(compareRuns(rows, "enforced-tools").verdict, "promising");
+});
+test("native evidence byte metrics are included in reports", () => {
+  assert.ok(METRICS.includes("evidence_bytes"));
+  assert.ok(METRICS.includes("retained_evidence_bytes"));
 });
